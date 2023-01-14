@@ -2,7 +2,7 @@ import subprocess
 import dropbox
 import os
 import requests
-
+import time
 
 #from Database.ConnectionDAO import ConnectionDAO
 
@@ -32,43 +32,10 @@ cur.close()
 conn.chiudiConnessione(conn.connection)
 ''' 
 
+#TODO: MECCANISMO A SEMAFORO
+
 #https://dropbox-sdk-python.readthedocs.io/en/latest/api/dropbox.html
 #per key https://www.dropbox.com/developers/apps
-'''
-def sendFile():
-    # Creare una connessione Dropbox
-    dbx = dropbox.Dropbox("sl.BW4c5fKrdPFENSUKIDBYdjuik7ZL5VKTBa1LL2BH6AvMHHpy_07aQRX31mmjqfgcPrDseeJ6jwOsnyQg4hCKkrdxzMWrNrIUzM-C5YjsI1fuM1EyGLCd7zYMH5Mhei4ARYZ0UotzDow5")
-
-    # Aprire il file da caricare
-    file = open("dump_log.txt", "rb")
-    
-    # Iniziare una sessione di caricamento
-    #da fixare
-    session = dbx.files_upload_session_start(file.read(1024*1024) )
-
-    # Caricare il file in piccole parti
-    #file position
-    offset = file.tell()
-    file_size = os.path.getsize("dump_log.txt")
-    while offset < file_size:
-        # Verificare la connessione
-        try:
-            response = requests.get("http://www.google.com", timeout=10)
-        except requests.ConnectionError:
-            print("Connessione interrotta. Riprendere il caricamento...")
-            # Salva l'offset su un file di controllo o un db
-            with open("offset.txt", "w") as f:
-                f.write(str(offset))
-        else:
-            file.seek(offset)
-            data = file.read(1024*1024)
-            session = dbx.files_upload_session_append(data, session.session_id, offset)
-            offset = file.tell()
-
-    # Chiudere la sessione di caricamento e caricare il file su Dropbox
-    response = dbx.files_upload_session_finish("/dump_log.txt", session.session_id, offset)
-    print("File caricato con successo su Dropbox con ID: ", response.id)
-'''
 
 def sendFile():
 
@@ -82,23 +49,31 @@ def sendFile():
     
     upload_session_start_result = dbx.files_upload_session_start(f.read(0))
 
-    cursor = dropbox.files.UploadSessionCursor(session_id=upload_session_start_result.session_id,
-                                               offset=f.tell())
+    cursor = dropbox.files.UploadSessionCursor(session_id=upload_session_start_result.session_id,offset=f.tell())
     
     commit = dropbox.files.CommitInfo(path="/testing.txt")
     
     
     while f.tell() < file_size:
         
-        if ((file_size - f.tell()) <= chunk_size):
-            print(dbx.files_upload_session_finish(f.read(chunk_size),
-                                            cursor,
-                                            commit))
+        try:
+            response = requests.get("http://www.google.com", timeout=10)
+        except requests.ConnectionError:
+            print("Connessione interrotta. Riprendere il caricamento...")
+            time.sleep(15)
+        except requests.ReadTimeout :
+            print("Connessione interrotta. Riprendere il caricamento...")
+            time.sleep(15)
+            #with open("offset.txt", "w") as f:
+                #f.write(str(offset))
         else:
-            dbx.files_upload_session_append(f.read(chunk_size),
-                                            cursor.session_id,
-                                            cursor.offset)
-            cursor.offset = f.tell()
+            
+            if ((file_size - f.tell()) <= chunk_size):
+                print(dbx.files_upload_session_finish(f.read(chunk_size),cursor,commit))
+            else:
+                dbx.files_upload_session_append(f.read(chunk_size),cursor.session_id,cursor.offset)
+                
+                cursor.offset = f.tell()
      
 def to7Zip():
 
@@ -117,8 +92,20 @@ def to7Zip():
         log_file.close()
 
     log_file.close()
-    
-    sendFile() 
+
+    check = True
+    while(check):
+        try:
+            response = requests.get("http://www.google.com", timeout=10)
+        except requests.ConnectionError:
+            print("Connessione interrotta. Riprendere il caricamento...")
+            time.sleep(15)
+        except requests.ReadTimeout :
+            print("Connessione interrotta. Riprendere il caricamento...")
+            time.sleep(15)
+        else:
+            check = False
+            sendFile() 
 
  
 def createDump():

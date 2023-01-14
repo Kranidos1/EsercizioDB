@@ -1,37 +1,12 @@
 import subprocess
 import dropbox
 import os
+import time
 import requests
 
-#TODO: MECCANISMO A SEMAFORO ,CHECK CONNESSIONE E RIPRESA
 
 #from Database.ConnectionDAO import ConnectionDAO
-
-'''
-conn = ConnectionDAO()
-
-
-# creare cursore
-cur = conn.connection.cursor()
-
-# eseguire query
-for i in range(1500 ,15000):
-    print("ok")
-    cur.execute("INSERT INTO `message` VALUES (%s,'2023-01-07 09:59:10','Mattia',0,'Test','2023-01-20 21:54:17',NULL,'1',NULL,0,NULL,'Testing','Ricorda Fatture',NULL,'[{\"obj\":\"testo\" ,\"label\":\"Testo\",\"id\":\"txt1\"},{\"obj\":\"testo\" ,\"label\":\"Testo\",\"id\":\"txt2\"}]','[{\"obj\":\"bottone\",\"label\":\"Ok\",\"function\":\"func.rispostaSemplice\",\"id\":\"bottonetmp1\"},{\"obj\":\"bottone\",\"label\":\"Rispondi\",\"function\":\"func.rispondi\",\"id\":\"bottonetmp2\"}]',NULL);",[i])
-
-conn.connection.commit()
-# recuperare i risultati
-results = cur.fetchall()
-
-# stampare i risultati
-for row in results:
-    print(row)
-
-# chiudere cursore e connessione
-cur.close()
-
-conn.chiudiConnessione(conn.connection)
-''' 
+ 
 
 #https://dropbox-sdk-python.readthedocs.io/en/latest/api/dropbox.html
 #per key https://www.dropbox.com/developers/apps
@@ -95,14 +70,24 @@ def sendFile():
     #check fine file
     while f.tell() < file_size:
         
-        #verifica se il chunk corrente e' l'ultimo
-        if ((file_size - f.tell()) <= chunk_size):
-            print(dbx.files_upload_session_finish(f.read(chunk_size),cursor,commit))
+        try:
+            response = requests.get("http://www.google.com", timeout=10)
+        except requests.ConnectionError:
+            print("Connessione interrotta. Riprendere il caricamento...")
+            # Salva l'offset su un file di controllo o un db
+            #with open("offset.txt", "w") as f:
+                #f.write(str(offset))
         else:
-            #carica il chunk corrente e aggiorna la posizione del cursore per il prossimo chunk
-            dbx.files_upload_session_append(f.read(chunk_size),cursor.session_id,cursor.offset)
             
-            cursor.offset = f.tell()
+            #verifica se il chunk corrente e' l'ultimo
+            if ((file_size - f.tell()) <= chunk_size):
+                #se non viene chiusa chunk persi. Possibile sfruttare su perdita connessione
+                print(dbx.files_upload_session_finish(f.read(chunk_size),cursor,commit))
+            else:
+                #carica il chunk corrente e aggiorna la posizione del cursore per il prossimo chunk
+                dbx.files_upload_session_append(f.read(chunk_size),cursor.session_id,cursor.offset)
+                
+                cursor.offset = f.tell()
      
 def to7Zip():
 
