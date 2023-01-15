@@ -3,9 +3,31 @@ import dropbox
 import os
 import requests
 import time
+import json
+
+#lettura file e controllo check evitando commenti
 
 #from Database.ConnectionDAO import ConnectionDAO
+#l'idea e' quella di aprire una download bar che di default non si puo chiudere. Tuttavia ,se dovesse mancare internet ,
+#viene data la possibilità di chiuderla e prima di chiudersi salva in un file di log che manca internet.
 
+#xhoLZS4jW2gAAAAAAAAAGa0b9CXeUaqUrd5ws9gvmf8
+#soluzione tokens
+#https://www.codemzy.com/blog/dropbox-long-lived-access-refresh-token
+
+r = requests.post(url="https://api.dropboxapi.com/oauth2/token" ,params={"client_id":"hu9v12z463b5ms9" ,"client_secret":"bl44dk2wwgctk2y" ,"code":"xhoLZS4jW2gAAAAAAAAAGt-i0_W91IZPo5ajs0zaMys" ,"grant_type":"authorization_code"})
+print(r.content)
+
+#"bP29Rbo9008AAAAAAAAAAan3hx-H-JIvEXg2rEmuyaT3Yv8cEij8seV0owoEf8zm"
+
+'''
+const dbx = new Dropbox({ 
+  clientId: '<APP_KEY>',
+  clientSecret: process.env.DBX_CLIENT_SECRET,
+  refreshToken: process.env.DBX_REFRESH_TOKEN
+});
+'''
+#SEGUI LA GUIDA ,REFRESH TOKEN ETERNO
 '''
 conn = ConnectionDAO()
 
@@ -29,10 +51,11 @@ for row in results:
 # chiudere cursore e connessione
 cur.close()
 
-conn.chiudiConnessione(conn.connection)
+conn.chiudiConnessione(conn.connection)  
 ''' 
 
-#TODO: MECCANISMO A SEMAFORO
+#TODO: MECCANISMO A SEMAFORO ,ACCESS_TOKEN AUTOMATICO
+#https://www.dropbox.com/home/Applicazioni/TestingTia-
 
 #https://dropbox-sdk-python.readthedocs.io/en/latest/api/dropbox.html
 #per key https://www.dropbox.com/developers/apps
@@ -40,19 +63,21 @@ conn.chiudiConnessione(conn.connection)
 def sendFile():
 
     chunk_size = 1024*1024
-    dbx = dropbox.Dropbox("sl.BW4c5fKrdPFENSUKIDBYdjuik7ZL5VKTBa1LL2BH6AvMHHpy_07aQRX31mmjqfgcPrDseeJ6jwOsnyQg4hCKkrdxzMWrNrIUzM-C5YjsI1fuM1EyGLCd7zYMH5Mhei4ARYZ0UotzDow5")
+    dbx = dropbox.Dropbox("sl.BW-DIq4C-HWOJZ9ZlB_r7Yx46tCM7baOFrxhb61XmuoM5lJLxsI40aN_rPNDUfkToIg_TV4gFKNqaueMSKruEM23WBS93_aMX5pl1ZbsxFdplWcEejT3t0olS0wvbvhmbLGs_msC9GFN")
     
-    file_path = "./DumpHandler/dump_log.txt"
+    file_path = "db_dump.sql"
     
     f = open(file_path ,"rb")
     file_size = os.path.getsize(file_path)
     
+    #crea sessione da 0
     upload_session_start_result = dbx.files_upload_session_start(f.read(0))
 
+    #oggetto per upload
     cursor = dropbox.files.UploadSessionCursor(session_id=upload_session_start_result.session_id,offset=f.tell())
     
+    #carica file nell app corrente sottoforma di testing.sql
     commit = dropbox.files.CommitInfo(path="/testing.txt")
-    
     
     while f.tell() < file_size:
         
@@ -68,9 +93,12 @@ def sendFile():
                 #f.write(str(offset))
         else:
             
+            #verifica se il chunk corrente e' l'ultimo
             if ((file_size - f.tell()) <= chunk_size):
+                #se non viene chiusa chunk persi. Possibile sfruttare su perdita connessione
                 print(dbx.files_upload_session_finish(f.read(chunk_size),cursor,commit))
             else:
+                #carica il chunk corrente e aggiorna la posizione del cursore per il prossimo chunk
                 dbx.files_upload_session_append(f.read(chunk_size),cursor.session_id,cursor.offset)
                 
                 cursor.offset = f.tell()
@@ -78,12 +106,12 @@ def sendFile():
 def to7Zip():
 
     #creare il file di log
-    log_file = open('./DumpHandler/zip_log.txt', 'w')
+    log_file = open('zip_log.txt', 'w')
     
     try:
         # Comprimere un file .sql in un file zip utilizzando 7-Zip
         #spiegazione lista : 7z comando  ,a argomento e significa crea o aggiungi ad archivio esistente 
-        subprocess.run(['7z', 'a', './DumpHandler/dumb_db.zip', './DumpHandler/db_dump.sql'] ,stderr=log_file)
+        subprocess.run(['7z', 'a', 'dumb_db.zip', 'db_dump.sql'] ,stderr=log_file)
     
         
     except Exception as e:
@@ -110,6 +138,8 @@ def to7Zip():
  
 def createDump():
     
+    fileCheck = 0 
+    
     db_name = 'database_notifica'
     db_user = 'root'
     db_pass = 'Dante200-'
@@ -121,8 +151,13 @@ def createDump():
     try:
         
         subprocess.run(['mysqldump', '-u' + db_user, '-p' + db_pass, db_name], 
-                    stdout=open('./DumpHandler/db_dump.sql', 'w'), stderr=log_file)
+                    stdout=open('db_dump.sql', 'w'), stderr=log_file)
         
+        #controlla se file creato ha una grandezza maggiore di 0
+        if os.path.getsize("db_dump.sql") > 0 :
+            fileCheck = 1
+            
+            
     except Exception as e:
         #se errore viene scritto in dump_log.txt
         print(str(e))
@@ -131,7 +166,9 @@ def createDump():
 
     log_file.close()
     
-    to7Zip()
+    #TODO check su filelog
+    if fileCheck == 1:
+        to7Zip()
     
     
         

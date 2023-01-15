@@ -1,1 +1,1 @@
-[WinError 2] Impossibile trovare il file specificato
+mysqldump: [Warning] Using a password on the command line interface can be insecure.
